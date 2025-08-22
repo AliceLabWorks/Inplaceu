@@ -1,5 +1,5 @@
 # inplace
-// TODO(user): Add simple overview of use/purpose
+一个能够原地更新的deployment，用来代替k8s原生deployment
 
 ## Description
 // TODO(user): An in-depth paragraph about your project and overview of use
