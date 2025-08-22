@@ -1,0 +1,12 @@
+apiVersion: batch.inplace.kubebuilder.io/v1
+kind: Inplaceu
+metadata:
+  labels:
+    app.kubernetes.io/name: inplace
+    app.kubernetes.io/managed-by: kustomize
+  name: inplaceu-sample
+spec:
+  # TODO(user): Add fields here
+  containerimagename: "nginx:latest"
+  deploymentname: "nginx-deployment"
+  deploymentnamespace: "default"

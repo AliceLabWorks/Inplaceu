@@ -1,0 +1,206 @@
+package sync
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"sync"
+	"sync/atomic"
+
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
+
+	batchv1 "inplace.kubebuilder.io/project/api/v1"
+	inplaceucore "inplace.kubebuilder.io/project/inplaceu_core"
+	inplaceutils "inplace.kubebuilder.io/project/utils"
+	expectations "inplace.kubebuilder.io/project/utils/expectations"
+)
+
+const (
+	// LengthOfInstanceID is the length of instance-id
+	LengthOfInstanceID = 5
+
+	// When batching pod creates, initialBatchSize is the size of the initial batch.
+	initialBatchSize = 1
+)
+
+func (r *realControl) Scale(
+	currentCS, updateCS *batchv1.Inplaceu,
+	currentRevision, updateRevision string,
+	pods []*corev1.Pod,
+) (bool, error) {
+	if updateCS.Spec.Replicas == nil {
+		return false, fmt.Errorf("spec.Replicas is nil")
+	}
+	// 1. calculate scale numbers
+	diffRes := calculateDiffsWithExpectation(updateCS, pods, currentRevision, updateRevision)
+	updatedPods, _ := inplaceutils.GroupUpdateAndNotUpdatePods(pods, updateRevision)
+
+	// 2. scale out
+	if diffRes.scaleUpNum > 0 {
+		// total number of this creation
+		expectedCreations := diffRes.scaleUpNum
+
+		klog.V(3).InfoS("CloneSet began to scale out pods, including current revision",
+			"cloneSet", klog.KObj(updateCS), "expectedCreations", expectedCreations)
+
+		// available instance-id come from free pvc
+		availableIDs := getOrGenAvailableIDs(expectedCreations, pods)
+
+		return r.createPods(expectedCreations,
+			currentCS, updateCS, currentRevision, updateRevision, availableIDs.List())
+	}
+
+	// 3. scale in
+	if diffRes.scaleDownNum > 0 {
+		klog.V(3).InfoS("CloneSet began to scale in", "cloneSet", klog.KObj(updateCS), "scaleDownNum", diffRes.scaleDownNum,
+			"deleteReadyLimit", diffRes.deleteReadyLimit)
+
+		podsPreparingToDelete := r.choosePodsToDelete(updateCS, diffRes.scaleDownNum, updatedPods)
+		podsToDelete := make([]*v1.Pod, 0, len(podsPreparingToDelete))
+		for _, pod := range podsPreparingToDelete {
+			if !inplaceutils.IsRunning(pod) {
+				podsToDelete = append(podsToDelete, pod)
+			} else if diffRes.deleteReadyLimit > 0 {
+				podsToDelete = append(podsToDelete, pod)
+				diffRes.deleteReadyLimit--
+			}
+		}
+
+		return r.deletePods(updateCS, podsToDelete)
+	}
+
+	return false, nil
+}
+
+func (r *realControl) createPods(
+	expectedCreations int,
+	currentCS, updateCS *batchv1.Inplaceu,
+	currentRevision, updateRevision string, availableIDs []string,
+) (bool, error) {
+	// new all pods need to create
+	coreControl := inplaceucore.New(updateCS)
+	newPods, err := coreControl.NewVersionedPods(updateCS, updateRevision, expectedCreations, availableIDs)
+	if err != nil {
+		return false, err
+	}
+
+	podsCreationChan := make(chan *v1.Pod, len(newPods))
+	for _, p := range newPods {
+		inplaceutils.ScaleExpectations.ExpectScale(inplaceutils.GetControllerKey(updateCS), expectations.Create, p.Name)
+		podsCreationChan <- p
+	}
+
+	var created int64
+	successPodNames := sync.Map{}
+	_, err = inplaceutils.DoItSlowly(len(newPods), initialBatchSize, func() error {
+		pod := <-podsCreationChan
+
+		cs := updateCS
+		var createErr error
+		if createErr = r.createOnePod(cs, pod); createErr != nil {
+			return createErr
+		}
+
+		atomic.AddInt64(&created, 1)
+
+		successPodNames.Store(pod.Name, struct{}{})
+		return nil
+	})
+
+	// rollback to ignore failure pods because the informer won't observe these pods
+	for _, pod := range newPods {
+		if _, ok := successPodNames.Load(pod.Name); !ok {
+			inplaceutils.ScaleExpectations.ObserveScale(inplaceutils.GetControllerKey(updateCS), expectations.Create, pod.Name)
+		}
+	}
+
+	if created == 0 {
+		return false, err
+	}
+	return true, err
+}
+
+func getOrGenAvailableIDs(num int, pods []*v1.Pod) sets.String {
+	existingIDs := sets.NewString()
+
+	for _, pod := range pods {
+		if id := pod.Labels[batchv1.InplaceuInstanceID]; len(id) > 0 {
+			existingIDs.Insert(id)
+		}
+	}
+
+	retIDs := sets.NewString()
+	for i := 0; i < num; i++ {
+		id := getOrGenInstanceID(existingIDs)
+		retIDs.Insert(id)
+	}
+
+	return retIDs
+}
+
+func getOrGenInstanceID(existingIDs sets.String) string {
+	var id string
+	for {
+		id = rand.String(LengthOfInstanceID)
+		if !existingIDs.Has(id) {
+			break
+		}
+	}
+	return id
+}
+
+func (r *realControl) createOnePod(cs *batchv1.Inplaceu, pod *v1.Pod) error {
+	if err := r.Create(context.TODO(), pod); err != nil {
+		r.recorder.Eventf(cs, v1.EventTypeWarning, "FailedCreate", "failed to create pod: %v, pod: %v", err, inplaceutils.DumpJSON(pod))
+		return err
+	}
+
+	r.recorder.Eventf(cs, v1.EventTypeNormal, "SuccessfulCreate", "succeed to create pod %s", pod.Name)
+	return nil
+}
+
+func (r *realControl) choosePodsToDelete(cs *batchv1.Inplaceu, totalDiff int, updatedPods []*v1.Pod) []*v1.Pod {
+	choose := func(pods []*v1.Pod, diff int) []*v1.Pod {
+		// No need to sort pods if we are about to delete all of them.
+		if diff < len(pods) {
+			var ranker inplaceutils.Ranker
+			ranker = inplaceutils.NewSameNodeRanker(pods)
+			sort.Sort(inplaceutils.ActivePodsWithRanks{
+				Pods:   pods,
+				Ranker: ranker,
+				AvailableFunc: func(pod *v1.Pod) bool {
+					return inplaceutils.IsRunning(pod)
+				},
+			})
+		} else if diff > len(pods) {
+			klog.InfoS("Diff > len(pods) in choosePodsToDelete func which is not expected")
+			return pods
+		}
+		return pods[:diff]
+	}
+
+	var podsToDelete []*v1.Pod
+	podsToDelete = choose(updatedPods, totalDiff)
+
+	return podsToDelete
+}
+
+func (r *realControl) deletePods(cs *batchv1.Inplaceu, podsToDelete []*v1.Pod) (bool, error) {
+	var modified bool
+	for _, pod := range podsToDelete {
+		inplaceutils.ScaleExpectations.ExpectScale(inplaceutils.GetControllerKey(cs), expectations.Delete, pod.Name)
+		if err := r.Delete(context.TODO(), pod); err != nil {
+			inplaceutils.ScaleExpectations.ObserveScale(inplaceutils.GetControllerKey(cs), expectations.Delete, pod.Name)
+			r.recorder.Eventf(cs, v1.EventTypeWarning, "FailedDelete", "failed to delete pod %s: %v", pod.Name, err)
+			return modified, err
+		}
+		modified = true
+		r.recorder.Event(cs, v1.EventTypeNormal, "SuccessfulDelete", fmt.Sprintf("succeed to delete pod %s", pod.Name))
+	}
+
+	return modified, nil
+}
