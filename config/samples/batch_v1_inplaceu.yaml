@@ -6,7 +6,19 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: inplaceu-sample
 spec:
-  # TODO(user): Add fields here
-  containerimagename: "nginx:latest"
-  deploymentname: "nginx-deployment"
-  deploymentnamespace: "default"
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inplace
+  replicas: 3
+  strategy: 
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: inplace
+    spec:
+      containers:
+        - name: inplace
+          image: nginx:latest

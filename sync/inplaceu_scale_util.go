@@ -100,7 +100,7 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 		res.scaleUpNum = num
 	} else if num < 0 {
 		// scale down
-		res.scaleDownNum = num
+		res.scaleDownNum = -num
 		// 总的不可达数
 		totalUnavailable := unavailableOldRevisionCount + unavailableNewRevisionCount
 		res.deleteReadyLimit = integer.IntMax(maxUnavailable+(len(pods)-replicas)-totalUnavailable, 0)

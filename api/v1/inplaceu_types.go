@@ -46,6 +46,7 @@ type InplaceuSpec struct {
 
 	// Template describes the pods that will be created.
 	// The only allowed template.spec.restartPolicy value is "Always".
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Template corev1.PodTemplateSpec `json:"template"`
 
 	// The deployment strategy to use to replace existing pods with new ones.

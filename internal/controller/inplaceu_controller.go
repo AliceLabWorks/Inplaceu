@@ -22,7 +22,6 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -41,7 +40,6 @@ import (
 	eventhandler "inplace.kubebuilder.io/project/inplaceu_event_handler"
 	inplacestatus "inplace.kubebuilder.io/project/status"
 	synccontrol "inplace.kubebuilder.io/project/sync"
-	"inplace.kubebuilder.io/project/utils"
 	inplaceutils "inplace.kubebuilder.io/project/utils"
 	inplacehistory "inplace.kubebuilder.io/project/utils/history"
 	refmanager "inplace.kubebuilder.io/project/utils/refmgr"
@@ -87,7 +85,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 			klog.ErrorS(retErr, "Failed syncing CloneSet", "cloneSet", req)
 		}
 		// clean the duration store
-		_ = utils.DurationStore.Pop(req.String())
+		_ = inplaceutils.DurationStore.Pop(req.String())
 	}()
 
 	// 先拿到实例
@@ -113,7 +111,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	}
 
 	// 如果上次扩缩容请求还没做完,那就等待
-	if scaleSatisfied, unsatisfiedDuration, scaleDirtyPods := utils.ScaleExpectations.SatisfiedExpectations(req.String()); !scaleSatisfied {
+	if scaleSatisfied, unsatisfiedDuration, scaleDirtyPods := inplaceutils.ScaleExpectations.SatisfiedExpectations(req.String()); !scaleSatisfied {
 		klog.V(4).InfoS("Not satisfied scale", "cloneSet", req, "scaleDirtyPods", scaleDirtyPods)
 		return reconcile.Result{RequeueAfter: 1000 - unsatisfiedDuration}, nil
 	}
@@ -123,6 +121,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	klog.V(4).InfoS("Get owned pods", "cloneSet", req, "filteredPods", filteredPods)
 
 	// 释放不属于当前control控制的pod(可能有人手动把标签改了，需要把这些pod释放掉)
 	filteredPods, err = r.claimPods(instance, filteredPods)
@@ -134,6 +133,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// revision里记录了pod的template
 	revisions, err := r.controllerHistory.ListControllerRevisions(instance, selector)
 	if err != nil {
+		klog.ErrorS(err, "Failed to list controller revisions", "inplaceu", req)
 		return reconcile.Result{}, err
 	}
 	history.SortControllerRevisions(revisions)
@@ -141,21 +141,22 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// get the current, and update revisions
 	currentRevision, updateRevision, collisionCount, err := r.getActiveRevisions(instance, revisions)
 	if err != nil {
+		klog.ErrorS(err, "Failed to get active controller revisions", "inplaceu", req)
 		return reconcile.Result{}, err
 	}
 	// If resourceVersion expectations have not satisfied yet, just skip this reconcile
-	utils.ResourceVersionExpectations.Observe(updateRevision)
-	if isSatisfied, unsatisfiedDuration := utils.ResourceVersionExpectations.IsSatisfied(updateRevision); !isSatisfied {
+	inplaceutils.ResourceVersionExpectations.Observe(updateRevision)
+	if isSatisfied, unsatisfiedDuration := inplaceutils.ResourceVersionExpectations.IsSatisfied(updateRevision); !isSatisfied {
 		if unsatisfiedDuration < 5*time.Minute {
 			klog.V(4).InfoS("Not satisfied resourceVersion for CloneSet, wait for updateRevision updating", "cloneSet", req, "updateRevisionName", updateRevision.Name)
 			return reconcile.Result{RequeueAfter: 5*time.Minute - unsatisfiedDuration}, nil
 		}
 		klog.InfoS("Expectation unsatisfied overtime for CloneSet, wait for updateRevision updating timeout", "cloneSet", req, "updateRevisionName", updateRevision.Name, "timeout", unsatisfiedDuration)
-		utils.ResourceVersionExpectations.Delete(updateRevision)
+		inplaceutils.ResourceVersionExpectations.Delete(updateRevision)
 	}
 	for _, pod := range filteredPods {
-		utils.ResourceVersionExpectations.Observe(pod)
-		if isSatisfied, unsatisfiedDuration := utils.ResourceVersionExpectations.IsSatisfied(pod); !isSatisfied {
+		inplaceutils.ResourceVersionExpectations.Observe(pod)
+		if isSatisfied, unsatisfiedDuration := inplaceutils.ResourceVersionExpectations.IsSatisfied(pod); !isSatisfied {
 			if unsatisfiedDuration >= 5*time.Minute {
 				klog.InfoS("Expectation unsatisfied overtime for CloneSet, wait for pod updating timeout", "cloneSet", req, "pod", klog.KObj(pod), "timeout", unsatisfiedDuration)
 				return reconcile.Result{}, nil
@@ -178,6 +179,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	// update new status
 	if err = r.statusUpdater.UpdateInplaceuSetStatus(instance, &newStatus, filteredPods); err != nil {
+		klog.ErrorS(err, "Failed to update CloneSet status", "cloneSet", req)
 		return reconcile.Result{}, err
 	}
 
@@ -249,7 +251,7 @@ func (r *InplaceuReconciler) getOwnedPods(iu *batchv1.Inplaceu) ([]*corev1.Pod, 
 		Namespace:     iu.Namespace,
 		FieldSelector: fields.SelectorFromSet(fields.Set{"ownerRefUID": string(iu.UID)}),
 	}
-	return utils.GetActiveAndInactivePods(r.Client, opts)
+	return inplaceutils.GetActiveAndInactivePods(r.Client, opts)
 }
 
 func (r *InplaceuReconciler) claimPods(instance *batchv1.Inplaceu, pods []*corev1.Pod) ([]*corev1.Pod, error) {
@@ -290,8 +292,9 @@ func (r *InplaceuReconciler) getActiveRevisions(cs *batchv1.Inplaceu, revisions 
 	}
 
 	// create a new revision from the current cs
-	updateRevision, err := r.revisionControl.NewRevision(cs, utils.NextRevision(revisions), &collisionCount)
+	updateRevision, err := r.revisionControl.NewRevision(cs, inplaceutils.NextRevision(revisions), &collisionCount)
 	if err != nil {
+		klog.ErrorS(err, "Failed to create revision")
 		return nil, nil, collisionCount, err
 	}
 
@@ -378,9 +381,31 @@ func (r *InplaceuReconciler) truncateHistory(
 // SetupWithManager sets up the controller with the Manager.
 func (r *InplaceuReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.controllerHistory = inplacehistory.NewHistory(r.Client)
-	r.revisionControl = revisioncontrol.NewRevisionControl()
+	r.revisionControl = revisioncontrol.NewRevisionControl(r.Scheme)
 	r.syncControl = synccontrol.New(r.Client, mgr.GetEventRecorderFor("inplaceu_controller"))
 	r.statusUpdater = inplacestatus.NewStatusUpdater(r.Client)
+
+	// 加在这里
+	err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&corev1.Pod{}, // 换成你实际需要索引的类型
+		"ownerRefUID",
+		func(rawObj client.Object) []string {
+			// 提取 ownerReference UID
+			pod, ok := rawObj.(*corev1.Pod)
+			if !ok {
+				return nil
+			}
+			var uids []string
+			for _, ref := range pod.OwnerReferences {
+				uids = append(uids, string(ref.UID))
+			}
+			return uids
+		},
+	)
+	if err != nil {
+		return err
+	}
 
 	return ctrl.NewControllerManagedBy(mgr).For(&batchv1.Inplaceu{},
 		builder.WithPredicates(
@@ -399,9 +424,8 @@ func (r *InplaceuReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			},
 		),
-	).
-		Watches(
-			&v1.Pod{},
-			&eventhandler.PodEventHandler{Reader: r.Client},
-		).Complete(r)
+	).Watches(
+		&corev1.Pod{},
+		&eventhandler.PodEventHandler{Reader: r.Client},
+	).Complete(r)
 }

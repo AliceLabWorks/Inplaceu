@@ -26,14 +26,9 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/kubernetes/pkg/controller/history"
-)
-
-var (
-	patchCodec = scheme.Codecs.LegacyCodec(schema.GroupVersion{Group: "inplace.kubebuilder.io", Version: "v1"})
 )
 
 // Interface is a interface to new and apply ControllerRevision.
@@ -43,11 +38,14 @@ type Interface interface {
 }
 
 // NewRevisionControl create a normal revision control.
-func NewRevisionControl() Interface {
-	return &realControl{}
+func NewRevisionControl(scheme *runtime.Scheme) Interface {
+	return &realControl{
+		scheme: scheme,
+	}
 }
 
 type realControl struct {
+	scheme *runtime.Scheme
 }
 
 func (c *realControl) NewRevision(cs *batchv1.Inplaceu, revision int64, collisionCount *int32) (*apps.ControllerRevision, error) {
@@ -79,6 +77,7 @@ func (c *realControl) NewRevision(cs *batchv1.Inplaceu, revision int64, collisio
 // PodSpecTemplate. We can modify this later to encompass more state (or less) and remain compatible with previously
 // recorded patches.
 func (c *realControl) getPatch(cs *batchv1.Inplaceu, coreControl inplaceucore.Control) ([]byte, error) {
+	patchCodec := serializer.NewCodecFactory(c.scheme).LegacyCodec(batchv1.GroupVersion)
 	str, err := runtime.Encode(patchCodec, cs)
 	if err != nil {
 		return nil, err
@@ -98,6 +97,7 @@ func (c *realControl) getPatch(cs *batchv1.Inplaceu, coreControl inplaceucore.Co
 
 func (c *realControl) ApplyRevision(cs *batchv1.Inplaceu, revision *apps.ControllerRevision) (*batchv1.Inplaceu, error) {
 	clone := cs.DeepCopy()
+	patchCodec := serializer.NewCodecFactory(c.scheme).LegacyCodec(batchv1.GroupVersion)
 	cloneBytes, err := runtime.Encode(patchCodec, clone)
 	if err != nil {
 		return nil, err
