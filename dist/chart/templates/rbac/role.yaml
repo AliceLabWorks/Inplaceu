@@ -1,0 +1,36 @@
+{{- if .Values.rbac.enable }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: inplace-manager-role
+rules:
+- apiGroups:
+  - batch.inplace.kubebuilder.io
+  resources:
+  - inplaceus
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch.inplace.kubebuilder.io
+  resources:
+  - inplaceus/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - batch.inplace.kubebuilder.io
+  resources:
+  - inplaceus/status
+  verbs:
+  - get
+  - patch
+  - update
+{{- end -}}
