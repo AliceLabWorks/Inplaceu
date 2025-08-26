@@ -1,6 +1,6 @@
 # inplaceu
 
-一个能够原地更新的deployment，用来代替k8s原生deployment
+简称iu, 一个能够原地更新pod的deployment，用来代替k8s原生deployment
 
 ## Description
 
