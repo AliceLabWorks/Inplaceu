@@ -25,9 +25,9 @@ import (
 
 	"gomodules.xyz/jsonpatch/v2"
 
-	inplaceutils "inplace.kubebuilder.io/project/utils"
-	"inplace.kubebuilder.io/project/utils/podadapter"
-	revisionadapter "inplace.kubebuilder.io/project/utils/revision_adapter"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
+	"inplace.kubebuilder.io/project/internal/utils/podadapter"
+	revisionadapter "inplace.kubebuilder.io/project/internal/utils/revision_adapter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"

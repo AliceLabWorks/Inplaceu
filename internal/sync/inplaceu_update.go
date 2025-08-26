@@ -21,10 +21,10 @@ import (
 	"time"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	inplaceupdate "inplace.kubebuilder.io/project/inplace_update"
-	inplacecore "inplace.kubebuilder.io/project/inplaceu_core"
-	"inplace.kubebuilder.io/project/specifieddelete"
-	inplaceutils "inplace.kubebuilder.io/project/utils"
+	inplaceupdate "inplace.kubebuilder.io/project/internal/inplace_update"
+	inplacecore "inplace.kubebuilder.io/project/internal/inplaceu_core"
+	"inplace.kubebuilder.io/project/internal/specifieddelete"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

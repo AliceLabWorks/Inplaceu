@@ -26,8 +26,8 @@ import (
 	"k8s.io/utils/integer"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	"inplace.kubebuilder.io/project/specifieddelete"
-	"inplace.kubebuilder.io/project/utils"
+	"inplace.kubebuilder.io/project/internal/specifieddelete"
+	"inplace.kubebuilder.io/project/internal/utils"
 )
 
 type expectationDiffs struct {

@@ -23,8 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	inplaceupdate "inplace.kubebuilder.io/project/inplace_update"
-	inplaceutils "inplace.kubebuilder.io/project/utils"
+	inplaceupdate "inplace.kubebuilder.io/project/internal/inplace_update"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
 )
 
 // Interface for managing pods scaling and updating.

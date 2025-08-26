@@ -30,10 +30,10 @@ import (
 	"k8s.io/klog/v2"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	inplaceucore "inplace.kubebuilder.io/project/inplaceu_core"
-	"inplace.kubebuilder.io/project/specifieddelete"
-	inplaceutils "inplace.kubebuilder.io/project/utils"
-	expectations "inplace.kubebuilder.io/project/utils/expectations"
+	inplaceucore "inplace.kubebuilder.io/project/internal/inplaceu_core"
+	"inplace.kubebuilder.io/project/internal/specifieddelete"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
+	expectations "inplace.kubebuilder.io/project/internal/utils/expectations"
 )
 
 const (

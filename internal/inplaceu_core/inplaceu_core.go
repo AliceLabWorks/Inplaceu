@@ -27,7 +27,7 @@ import (
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
 	v1 "inplace.kubebuilder.io/project/api/v1"
-	utils "inplace.kubebuilder.io/project/utils"
+	utils "inplace.kubebuilder.io/project/internal/utils"
 )
 
 var (

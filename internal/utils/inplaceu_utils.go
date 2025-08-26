@@ -34,8 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	expectations "inplace.kubebuilder.io/project/utils/expectations"
-	requeueduration "inplace.kubebuilder.io/project/utils/requeueduration"
+	expectations "inplace.kubebuilder.io/project/internal/utils/expectations"
+	requeueduration "inplace.kubebuilder.io/project/internal/utils/requeueduration"
 )
 
 var (

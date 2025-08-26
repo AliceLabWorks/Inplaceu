@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	inplaceucore "inplace.kubebuilder.io/project/inplaceu_core"
-	"inplace.kubebuilder.io/project/utils"
+	inplaceucore "inplace.kubebuilder.io/project/internal/inplaceu_core"
+	"inplace.kubebuilder.io/project/internal/utils"
 
 	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"

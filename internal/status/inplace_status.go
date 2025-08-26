@@ -20,7 +20,7 @@ import (
 	"context"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	inplaceutils "inplace.kubebuilder.io/project/utils"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"

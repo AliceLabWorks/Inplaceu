@@ -37,13 +37,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
-	eventhandler "inplace.kubebuilder.io/project/inplaceu_event_handler"
-	inplacestatus "inplace.kubebuilder.io/project/status"
-	synccontrol "inplace.kubebuilder.io/project/sync"
-	inplaceutils "inplace.kubebuilder.io/project/utils"
-	inplacehistory "inplace.kubebuilder.io/project/utils/history"
-	refmanager "inplace.kubebuilder.io/project/utils/refmgr"
-	revisioncontrol "inplace.kubebuilder.io/project/utils/revision"
+	eventhandler "inplace.kubebuilder.io/project/internal/inplaceu_event_handler"
+	inplacestatus "inplace.kubebuilder.io/project/internal/status"
+	synccontrol "inplace.kubebuilder.io/project/internal/sync"
+	inplaceutils "inplace.kubebuilder.io/project/internal/utils"
+	inplacehistory "inplace.kubebuilder.io/project/internal/utils/history"
+	refmanager "inplace.kubebuilder.io/project/internal/utils/refmgr"
+	revisioncontrol "inplace.kubebuilder.io/project/internal/utils/revision"
 )
 
 // InplaceuReconciler reconciles a Inplaceu object
