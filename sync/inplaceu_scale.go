@@ -15,6 +15,7 @@ import (
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
 	inplaceucore "inplace.kubebuilder.io/project/inplaceu_core"
+	"inplace.kubebuilder.io/project/specifieddelete"
 	inplaceutils "inplace.kubebuilder.io/project/utils"
 	expectations "inplace.kubebuilder.io/project/utils/expectations"
 )
@@ -35,11 +36,14 @@ func (r *realControl) Scale(
 	if updateCS.Spec.Replicas == nil {
 		return false, fmt.Errorf("spec.Replicas is nil")
 	}
-	// 1. calculate scale numbers
+	// 1. manage pods to delete
+	podsSpecifiedToDelete, _ := getPlannedDeletedPods(pods)
+
+	// 2. calculate scale numbers
 	diffRes := calculateDiffsWithExpectation(updateCS, pods, currentRevision, updateRevision)
 	updatedPods, _ := inplaceutils.GroupUpdateAndNotUpdatePods(pods, updateRevision)
 
-	// 2. scale out
+	// 3. scale out
 	if diffRes.scaleUpNum > 0 {
 		// total number of this creation
 		expectedCreations := diffRes.scaleUpNum
@@ -54,7 +58,28 @@ func (r *realControl) Scale(
 			currentCS, updateCS, currentRevision, updateRevision, availableIDs.List())
 	}
 
-	// 3. scale in
+	// 4. specified delete
+	if len(podsSpecifiedToDelete) > 0 {
+		newPodsToDelete, oldPodsToDelete := inplaceutils.GroupUpdateAndNotUpdatePods(podsSpecifiedToDelete, updateRevision)
+		klog.V(3).InfoS("CloneSet tried to delete pods specified", "cloneSet", klog.KObj(updateCS), "deleteReadyLimit", diffRes.deleteReadyLimit,
+			"newPods", inplaceutils.GetPodNames(newPodsToDelete).List(), "oldPods", inplaceutils.GetPodNames(oldPodsToDelete).List())
+
+		podsCanDelete := make([]*v1.Pod, 0, len(podsSpecifiedToDelete))
+		for _, pod := range podsSpecifiedToDelete {
+			if !inplaceutils.IsPodAvailable(pod, updateCS.Spec.MinReadySeconds) {
+				podsCanDelete = append(podsCanDelete, pod)
+			} else if diffRes.deleteReadyLimit > 0 {
+				podsCanDelete = append(podsCanDelete, pod)
+				diffRes.deleteReadyLimit--
+			}
+		}
+
+		if modified, err := r.deletePods(updateCS, podsCanDelete); err != nil || modified {
+			return modified, err
+		}
+	}
+
+	// 5. scale in
 	if diffRes.scaleDownNum > 0 {
 		klog.V(3).InfoS("CloneSet began to scale in", "cloneSet", klog.KObj(updateCS), "scaleDownNum", diffRes.scaleDownNum,
 			"deleteReadyLimit", diffRes.deleteReadyLimit)
@@ -203,4 +228,16 @@ func (r *realControl) deletePods(cs *batchv1.Inplaceu, podsToDelete []*v1.Pod) (
 	}
 
 	return modified, nil
+}
+
+func getPlannedDeletedPods(pods []*v1.Pod) ([]*v1.Pod, int) {
+	var podsSpecifiedToDelete []*v1.Pod
+	names := sets.NewString()
+	for _, pod := range pods {
+		if specifieddelete.IsSpecifiedDelete(pod) {
+			names.Insert(pod.Name)
+			podsSpecifiedToDelete = append(podsSpecifiedToDelete, pod)
+		}
+	}
+	return podsSpecifiedToDelete, names.Len()
 }

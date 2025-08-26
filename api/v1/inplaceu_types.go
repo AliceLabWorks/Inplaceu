@@ -25,9 +25,9 @@ import (
 const (
 	// CloneSetInstanceID is a unique id for Pods and PVCs.
 	// Each pod and the pvcs it owns have the same instance-id.
-	InplaceuInstanceID = "apps.kruise.io/cloneset-instance-id"
+	InplaceuInstanceID = "batch.inplace.kubebuilder.io/cloneset-instance-id"
 
-	SpecifiedDeleteKey = "apps.kruise.io/specified-delete"
+	SpecifiedDeleteKey = "batch.inplace.kubebuilder.io/specified-delete"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!

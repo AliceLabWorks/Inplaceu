@@ -10,6 +10,7 @@ import (
 	"k8s.io/utils/integer"
 
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
+	"inplace.kubebuilder.io/project/specifieddelete"
 	"inplace.kubebuilder.io/project/utils"
 )
 
@@ -56,6 +57,7 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 
 	var newRevisionCount, oldRevisionCount int
 	var unavailableNewRevisionCount, unavailableOldRevisionCount int
+	var toDeleteNewRevisionCount, toDeleteOldRevisionCount int
 	defer func() {
 		if res.isEmpty() {
 			return
@@ -63,7 +65,8 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 		klog.V(1).InfoS("Calculate diffs for CloneSet", "cloneSet", klog.KObj(cs), "replicas", replicas,
 			"maxSurge", maxSurge, "maxUnavailable", maxUnavailable, "allPodCount", len(pods), "newRevisionCount", newRevisionCount,
 			"oldrevisionCount", oldRevisionCount, "unavailableNewRevisionCount", unavailableNewRevisionCount,
-			"unavailableOldRevisionCount", unavailableOldRevisionCount, "result", res.String())
+			"unavailableOldRevisionCount", unavailableOldRevisionCount, "toDeleteOldRevisionCount", toDeleteOldRevisionCount,
+			"toDeleteNewRevisionCount", toDeleteNewRevisionCount, "result", res.String())
 	}()
 
 	isPodUpdate := func(pod *corev1.Pod, updateRevision string) bool {
@@ -74,21 +77,33 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 		if isPodUpdate(p, updateRevision) {
 			newRevisionCount++
 
-			if !utils.IsRunning(p) {
+			if specifieddelete.IsSpecifiedDelete(p) {
+				toDeleteNewRevisionCount++
+			} else if !utils.IsRunning(p) {
 				unavailableNewRevisionCount++
 			}
 		} else {
 			oldRevisionCount++
 
-			if !utils.IsRunning(p) {
+			if specifieddelete.IsSpecifiedDelete(p) {
+				toDeleteOldRevisionCount++
+			} else if !utils.IsRunning(p) {
 				unavailableOldRevisionCount++
 			}
 		}
 	}
 
-	// 说明old需要删除,那就可以新增一些新版本,为了平滑升级
-	if maxSurge > 0 && oldRevisionCount > 0 {
-		res.useSurge = integer.IntMin(maxSurge, oldRevisionCount)
+	if maxSurge > 0 {
+		// 有需要特别删除的，就补一些,平滑升级
+		if toDeleteCount := toDeleteNewRevisionCount + toDeleteOldRevisionCount; toDeleteCount > 0 {
+			res.useSurge = toDeleteCount
+		}
+		// 说明有一些老版本需要升级为新版本,补一些,平滑升级
+		if oldRevisionCount > toDeleteOldRevisionCount {
+			res.useSurge = integer.IntMax(res.useSurge, oldRevisionCount-toDeleteOldRevisionCount)
+		}
+		// 限制一下
+		res.useSurge = integer.IntMin(res.useSurge, maxSurge)
 	}
 
 	// prepare for scale calculation
@@ -98,17 +113,21 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 	// scale up,扩容直接扩就完事了
 	if num > 0 {
 		res.scaleUpNum = num
-	} else if num < 0 {
+	} else if downNum := currentTotalCount - expectedTotalCount - toDeleteNewRevisionCount - toDeleteOldRevisionCount; downNum > 0 {
 		// scale down
-		res.scaleDownNum = -num
+		res.scaleDownNum = downNum
+	}
+
+	if toDeleteNewRevisionCount > 0 || toDeleteOldRevisionCount > 0 || res.scaleDownNum > 0 {
 		// 总的不可达数
 		totalUnavailable := unavailableOldRevisionCount + unavailableNewRevisionCount
 		res.deleteReadyLimit = integer.IntMax(maxUnavailable+(len(pods)-replicas)-totalUnavailable, 0)
 	}
 
 	// The consistency between scale and update will be guaranteed by syncCloneSet and expectations
-	if oldRevisionCount != 0 {
-		res.updateNum = oldRevisionCount
+	// 其实在update时如果走到这里,toDeleteOldRevisionCount应该是0
+	if oldRevisionCount > toDeleteOldRevisionCount {
+		res.updateNum = oldRevisionCount - toDeleteOldRevisionCount
 		res.updateMaxUnavailable = maxUnavailable + len(pods) - replicas
 	}
 	return

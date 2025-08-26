@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	kubecontroller "k8s.io/kubernetes/pkg/controller"
 	"k8s.io/utils/integer"
@@ -208,4 +209,12 @@ func GetPodsSortFunc(pods []*corev1.Pod, waitUpdateIndexes []int) func(i, j int)
 	return func(i, j int) bool {
 		return kubecontroller.ActivePods(pods).Less(waitUpdateIndexes[i], waitUpdateIndexes[j])
 	}
+}
+
+func GetPodNames(pods []*corev1.Pod) sets.String {
+	set := sets.NewString()
+	for _, pod := range pods {
+		set.Insert(pod.Name)
+	}
+	return set
 }

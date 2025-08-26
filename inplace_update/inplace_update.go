@@ -37,19 +37,19 @@ const (
 
 	// InPlaceUpdateStateKey records the state of inplace-update.
 	// The value of annotation is InPlaceUpdateState.
-	InPlaceUpdateStateKey string = "apps.kruise.io/inplace-update-state"
+	InPlaceUpdateStateKey string = "batch.inplace.kubebuilder.io/inplace-update-state"
 	// TODO: will be removed since v1.0.0
 	InPlaceUpdateStateKeyOld string = "inplace-update-state"
 
 	// InPlaceUpdateGraceKey records the spec that Pod should be updated when
 	// grace period ends.
-	InPlaceUpdateGraceKey string = "apps.kruise.io/inplace-update-grace"
+	InPlaceUpdateGraceKey string = "batch.inplace.kubebuilder.io/inplace-update-grace"
 	// TODO: will be removed since v1.0.0
 	InPlaceUpdateGraceKeyOld string = "inplace-update-grace"
 
 	// RuntimeContainerMetaKey is a key in pod annotations. Kruise-daemon should report the
 	// states of runtime containers into its value, which is a structure JSON of RuntimeContainerMetaSet type.
-	RuntimeContainerMetaKey = "apps.kruise.io/runtime-containers-meta"
+	RuntimeContainerMetaKey = "batch.inplace.kubebuilder.io/runtime-containers-meta"
 )
 
 var (

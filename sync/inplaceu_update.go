@@ -7,10 +7,12 @@ import (
 	batchv1 "inplace.kubebuilder.io/project/api/v1"
 	inplaceupdate "inplace.kubebuilder.io/project/inplace_update"
 	inplacecore "inplace.kubebuilder.io/project/inplaceu_core"
+	"inplace.kubebuilder.io/project/specifieddelete"
 	inplaceutils "inplace.kubebuilder.io/project/utils"
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
@@ -131,6 +133,14 @@ func (c *realControl) updatePod(cs *batchv1.Inplaceu, coreControl inplacecore.Co
 	klog.InfoS("CloneSet could not update Pod in-place, so it will back off to ReCreate", "cloneSet", klog.KObj(cs), "pod", klog.KObj(pod))
 
 	klog.V(2).InfoS("CloneSet started to patch Pod specified-delete for update", "cloneSet", klog.KObj(cs), "pod", klog.KObj(pod), "updateRevision", klog.KObj(updateRevision))
+
+	if patched, err := specifieddelete.PatchPodSpecifiedDelete(c.Client, pod, "true"); err != nil {
+		c.recorder.Eventf(cs, v1.EventTypeWarning, "FailedUpdatePodReCreate",
+			"failed to patch pod specified-delete %s for update(revision %s): %v", pod.Name, updateRevision.Name, err)
+		return 0, err
+	} else if patched {
+		inplaceutils.ResourceVersionExpectations.Expect(pod)
+	}
 
 	c.recorder.Eventf(cs, corev1.EventTypeNormal, "SuccessfulUpdatePodReCreate",
 		"successfully patch pod %s specified-delete for update(revision %s)", pod.Name, updateRevision.Name)
