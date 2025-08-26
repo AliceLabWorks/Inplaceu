@@ -77,12 +77,12 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	defer func() {
 		if retErr == nil {
 			if res.RequeueAfter > 0 {
-				klog.InfoS("Finished syncing CloneSet", "cloneSet", req, "cost", time.Since(startTime), "result", res)
+				klog.InfoS("Finished syncing inplaceUs", "inplaceU", req, "cost", time.Since(startTime), "result", res)
 			} else {
-				klog.InfoS("Finished syncing CloneSet", "cloneSet", req, "cost", time.Since(startTime))
+				klog.InfoS("Finished syncing inplaceUs", "inplaceU", req, "cost", time.Since(startTime))
 			}
 		} else {
-			klog.ErrorS(retErr, "Failed syncing CloneSet", "cloneSet", req)
+			klog.ErrorS(retErr, "Failed syncing inplaceUs", "inplaceU", req)
 		}
 		// clean the duration store
 		_ = inplaceutils.DurationStore.Pop(req.String())
@@ -95,8 +95,8 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
 			// For additional cleanup logic use finalizers.
-			klog.V(3).InfoS("CloneSet has been deleted", "cloneSet", req)
-			// clonesetutils.ScaleExpectations.DeleteExpectations(request.String())
+			klog.V(3).InfoS("inplaceU has been deleted", "inplaceU", req)
+			inplaceutils.ScaleExpectations.DeleteExpectations(req.String())
 			return reconcile.Result{}, nil
 		}
 		return reconcile.Result{}, err
@@ -105,14 +105,14 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	// 拿到selector
 	selector, err := metav1.LabelSelectorAsSelector(instance.Spec.Selector)
 	if err != nil {
-		klog.ErrorS(err, "Error converting CloneSet selector", "cloneSet", req)
+		klog.ErrorS(err, "Error converting inplaceU selector", "inplaceU", req)
 		// This is a non-transient error, so don't retry.
 		return reconcile.Result{}, nil
 	}
 
 	// 如果上次扩缩容请求还没做完,那就等待
 	if scaleSatisfied, unsatisfiedDuration, scaleDirtyPods := inplaceutils.ScaleExpectations.SatisfiedExpectations(req.String()); !scaleSatisfied {
-		klog.V(4).InfoS("Not satisfied scale", "cloneSet", req, "scaleDirtyPods", scaleDirtyPods)
+		klog.V(4).InfoS("Not satisfied scale", "inplaceU", req, "scaleDirtyPods", scaleDirtyPods)
 		return reconcile.Result{RequeueAfter: 1000 - unsatisfiedDuration}, nil
 	}
 
@@ -121,7 +121,7 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	klog.V(4).InfoS("Get owned pods", "cloneSet", req, "filteredPods", filteredPods)
+	klog.V(4).InfoS("Get owned pods", "inplaceU", req, "filteredPods", filteredPods)
 
 	// 释放不属于当前control控制的pod(可能有人手动把标签改了，需要把这些pod释放掉)
 	filteredPods, err = r.claimPods(instance, filteredPods)
@@ -148,20 +148,20 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 	inplaceutils.ResourceVersionExpectations.Observe(updateRevision)
 	if isSatisfied, unsatisfiedDuration := inplaceutils.ResourceVersionExpectations.IsSatisfied(updateRevision); !isSatisfied {
 		if unsatisfiedDuration < 5*time.Minute {
-			klog.V(4).InfoS("Not satisfied resourceVersion for CloneSet, wait for updateRevision updating", "cloneSet", req, "updateRevisionName", updateRevision.Name)
+			klog.V(4).InfoS("Not satisfied resourceVersion for inplaceU, wait for updateRevision updating", "inplaceU", req, "updateRevisionName", updateRevision.Name)
 			return reconcile.Result{RequeueAfter: 5*time.Minute - unsatisfiedDuration}, nil
 		}
-		klog.InfoS("Expectation unsatisfied overtime for CloneSet, wait for updateRevision updating timeout", "cloneSet", req, "updateRevisionName", updateRevision.Name, "timeout", unsatisfiedDuration)
+		klog.InfoS("Expectation unsatisfied overtime for inplaceU, wait for updateRevision updating timeout", "inplaceU", req, "updateRevisionName", updateRevision.Name, "timeout", unsatisfiedDuration)
 		inplaceutils.ResourceVersionExpectations.Delete(updateRevision)
 	}
 	for _, pod := range filteredPods {
 		inplaceutils.ResourceVersionExpectations.Observe(pod)
 		if isSatisfied, unsatisfiedDuration := inplaceutils.ResourceVersionExpectations.IsSatisfied(pod); !isSatisfied {
 			if unsatisfiedDuration >= 5*time.Minute {
-				klog.InfoS("Expectation unsatisfied overtime for CloneSet, wait for pod updating timeout", "cloneSet", req, "pod", klog.KObj(pod), "timeout", unsatisfiedDuration)
+				klog.InfoS("Expectation unsatisfied overtime for inplaceU, wait for pod updating timeout", "inplaceU", req, "pod", klog.KObj(pod), "timeout", unsatisfiedDuration)
 				return reconcile.Result{}, nil
 			}
-			klog.V(4).InfoS("Not satisfied resourceVersion for CloneSet, wait for pod updating", "cloneSet", req, "pod", klog.KObj(pod))
+			klog.V(4).InfoS("Not satisfied resourceVersion for inplaceU, wait for pod updating", "inplaceU", req, "pod", klog.KObj(pod))
 			return reconcile.Result{RequeueAfter: 5*time.Minute - unsatisfiedDuration}, nil
 		}
 	}
@@ -179,12 +179,12 @@ func (r *InplaceuReconciler) Reconcile(ctx context.Context, req ctrl.Request) (r
 
 	// update new status
 	if err = r.statusUpdater.UpdateInplaceuSetStatus(instance, &newStatus, filteredPods); err != nil {
-		klog.ErrorS(err, "Failed to update CloneSet status", "cloneSet", req)
+		klog.ErrorS(err, "Failed to update inplaceU status", "inplaceU", req)
 		return reconcile.Result{}, err
 	}
 
 	if err = r.truncateHistory(instance, filteredPods, revisions, currentRevision, updateRevision); err != nil {
-		klog.ErrorS(err, "Failed to truncate history for CloneSet", "cloneSet", req)
+		klog.ErrorS(err, "Failed to truncate history for inplaceU", "inplaceU", req)
 	}
 
 	if syncErr == nil && instance.Spec.MinReadySeconds > 0 && newStatus.AvailableReplicas != newStatus.ReadyReplicas {
@@ -278,27 +278,26 @@ func (r *InplaceuReconciler) claimPods(instance *batchv1.Inplaceu, pods []*corev
 	return claimedPods, nil
 }
 
-func (r *InplaceuReconciler) getActiveRevisions(cs *batchv1.Inplaceu, revisions []*apps.ControllerRevision) (
+func (r *InplaceuReconciler) getActiveRevisions(iu *batchv1.Inplaceu, revisions []*apps.ControllerRevision) (
 	*apps.ControllerRevision, *apps.ControllerRevision, int32, error,
 ) {
 	var currentRevision, updateRevision *apps.ControllerRevision
 	revisionCount := len(revisions)
 
-	// Use a local copy of cs.Status.CollisionCount to avoid modifying cs.Status directly.
-	// This copy is returned so the value gets carried over to cs.Status in UpdateCloneSetStatus.
+	// Use a local copy of iu.Status.CollisionCount to avoid modifying iu.Status directly.
+	// This copy is returned so the value gets carried over to iu.Status in UpdateinplaceUStatus.
 	var collisionCount int32
-	if cs.Status.CollisionCount != nil {
-		collisionCount = *cs.Status.CollisionCount
+	if iu.Status.CollisionCount != nil {
+		collisionCount = *iu.Status.CollisionCount
 	}
 
-	// create a new revision from the current cs
-	updateRevision, err := r.revisionControl.NewRevision(cs, inplaceutils.NextRevision(revisions), &collisionCount)
+	// create a new revision from the current iu
+	updateRevision, err := r.revisionControl.NewRevision(iu, inplaceutils.NextRevision(revisions), &collisionCount)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create revision")
 		return nil, nil, collisionCount, err
 	}
 
-	// When there is a change in the PVC only, no new revision will be generated.
 	// find any equivalent revisions
 	equalRevisions := history.FindEqualRevisions(revisions, updateRevision)
 	equalCount := len(equalRevisions)
@@ -314,7 +313,7 @@ func (r *InplaceuReconciler) getActiveRevisions(cs *batchv1.Inplaceu, revisions 
 		}
 	} else {
 		//if there is no equivalent revision we create a new one
-		updateRevision, err = r.controllerHistory.CreateControllerRevision(cs, updateRevision, &collisionCount)
+		updateRevision, err = r.controllerHistory.CreateControllerRevision(iu, updateRevision, &collisionCount)
 		if err != nil {
 			return nil, nil, collisionCount, err
 		}
@@ -322,7 +321,7 @@ func (r *InplaceuReconciler) getActiveRevisions(cs *batchv1.Inplaceu, revisions 
 
 	// attempt to find the revision that corresponds to the current revision
 	for i := range revisions {
-		if revisions[i].Name == cs.Status.CurrentRevision {
+		if revisions[i].Name == iu.Status.CurrentRevision {
 			currentRevision = revisions[i]
 			break
 		}
@@ -337,7 +336,7 @@ func (r *InplaceuReconciler) getActiveRevisions(cs *batchv1.Inplaceu, revisions 
 }
 
 func (r *InplaceuReconciler) truncateHistory(
-	cs *batchv1.Inplaceu,
+	iu *batchv1.Inplaceu,
 	pods []*corev1.Pod,
 	revisions []*apps.ControllerRevision,
 	current *apps.ControllerRevision,
@@ -362,8 +361,8 @@ func (r *InplaceuReconciler) truncateHistory(
 	}
 	historyLen := len(noLiveRevisions)
 	historyLimit := 10
-	if cs.Spec.RevisionHistoryLimit != nil {
-		historyLimit = int(*cs.Spec.RevisionHistoryLimit)
+	if iu.Spec.RevisionHistoryLimit != nil {
+		historyLimit = int(*iu.Spec.RevisionHistoryLimit)
 	}
 	if historyLen <= historyLimit {
 		return nil
@@ -416,8 +415,8 @@ func (r *InplaceuReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					if okOld && okNew {
 						if oldCS.Spec.Replicas != nil && newCS.Spec.Replicas != nil &&
 							*oldCS.Spec.Replicas != *newCS.Spec.Replicas {
-							klog.V(4).InfoS("Observed updated replicas for CloneSet",
-								"cloneSet", klog.KObj(newCS), "oldReplicas", *oldCS.Spec.Replicas, "newReplicas", *newCS.Spec.Replicas)
+							klog.V(4).InfoS("Observed updated replicas for inplaceU",
+								"inplaceU", klog.KObj(newCS), "oldReplicas", *oldCS.Spec.Replicas, "newReplicas", *newCS.Spec.Replicas)
 						}
 					}
 					return true // 这里return true表示无论如何都要入队

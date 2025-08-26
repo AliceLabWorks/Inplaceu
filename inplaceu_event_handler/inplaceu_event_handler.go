@@ -86,19 +86,19 @@ func (e *PodEventHandler) Create(ctx context.Context, evt event.TypedCreateEvent
 		return
 	}
 
-	// Otherwise, it's an orphan. Get a list of all matching CloneSets and sync
+	// Otherwise, it's an orphan. Get a list of all matching inplaceus and sync
 	// them to see if anyone wants to adopt it.
 	// DO NOT observe creation because no controller should be waiting for an
 	// orphan.
-	csList := e.getPodCloneSets(pod)
+	csList := e.getPodInplaceUs(pod)
 	if len(csList) == 0 {
 		return
 	}
-	klog.V(4).InfoS("Orphan Pod created", "pod", klog.KObj(pod), "owner", e.joinCloneSetNames(csList))
-	for _, cs := range csList {
+	klog.V(4).InfoS("Orphan Pod created", "pod", klog.KObj(pod), "owner", e.joinInplaceUNames(csList))
+	for _, iu := range csList {
 		q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-			Name:      cs.GetName(),
-			Namespace: cs.GetNamespace(),
+			Name:      iu.GetName(),
+			Namespace: iu.GetNamespace(),
 		}})
 	}
 }
@@ -166,15 +166,15 @@ func (e *PodEventHandler) Update(ctx context.Context, evt event.TypedUpdateEvent
 	// Otherwise, it's an orphan. If anything changed, sync matching controllers
 	// to see if anyone wants to adopt it now.
 	if labelChanged || controllerRefChanged {
-		csList := e.getPodCloneSets(curPod)
+		csList := e.getPodInplaceUs(curPod)
 		if len(csList) == 0 {
 			return
 		}
-		klog.V(4).InfoS("Orphan Pod updated", "pod", klog.KObj(curPod), "owner", e.joinCloneSetNames(csList))
-		for _, cs := range csList {
+		klog.V(4).InfoS("Orphan Pod updated", "pod", klog.KObj(curPod), "owner", e.joinInplaceUNames(csList))
+		for _, iu := range csList {
 			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      cs.GetName(),
-				Namespace: cs.GetNamespace(),
+				Name:      iu.GetName(),
+				Namespace: iu.GetNamespace(),
 			}})
 		}
 	}
@@ -228,34 +228,34 @@ func resolveControllerRef(namespace string, controllerRef *metav1.OwnerReference
 	return nil
 }
 
-func (e *PodEventHandler) getPodCloneSets(pod *v1.Pod) []batchv1.Inplaceu {
+func (e *PodEventHandler) getPodInplaceUs(pod *v1.Pod) []batchv1.Inplaceu {
 	csList := batchv1.InplaceuList{}
 	if err := e.List(context.TODO(), &csList, client.InNamespace(pod.Namespace)); err != nil {
 		return nil
 	}
 
 	var csMatched []batchv1.Inplaceu
-	for _, cs := range csList.Items {
-		selector, err := metav1.LabelSelectorAsSelector(cs.Spec.Selector)
+	for _, iu := range csList.Items {
+		selector, err := metav1.LabelSelectorAsSelector(iu.Spec.Selector)
 		if err != nil || selector.Empty() || !selector.Matches(labels.Set(pod.Labels)) {
 			continue
 		}
 
-		csMatched = append(csMatched, cs)
+		csMatched = append(csMatched, iu)
 	}
 
 	if len(csMatched) > 1 {
 		// ControllerRef will ensure we don't do anything crazy, but more than one
 		// item in this list nevertheless constitutes user error.
-		klog.InfoS("Error! More than one CloneSet is selecting pod", "pod", klog.KObj(pod), "cloneSets", e.joinCloneSetNames(csMatched))
+		klog.InfoS("Error! More than one InplaceU is selecting pod", "pod", klog.KObj(pod), "inplaceUs", e.joinInplaceUNames(csMatched))
 	}
 	return csMatched
 }
 
-func (e *PodEventHandler) joinCloneSetNames(csList []batchv1.Inplaceu) string {
+func (e *PodEventHandler) joinInplaceUNames(csList []batchv1.Inplaceu) string {
 	var names []string
-	for _, cs := range csList {
-		names = append(names, cs.Name)
+	for _, iu := range csList {
+		names = append(names, iu.Name)
 	}
 	return strings.Join(names, ",")
 }

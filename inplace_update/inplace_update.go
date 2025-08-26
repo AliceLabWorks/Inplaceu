@@ -20,7 +20,6 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -29,35 +28,14 @@ import (
 )
 
 const (
-	// InPlaceUpdateReady must be added into template.spec.readinessGates when pod podUpdatePolicy
-	// is InPlaceIfPossible or InPlaceOnly. The condition in podStatus will be updated to False before in-place
-	// updating and updated to True after the update is finished. This ensures pod to remain at NotReady state while
-	// in-place update is happening.
-	InPlaceUpdateReady v1.PodConditionType = "InPlaceUpdateReady"
-
 	// InPlaceUpdateStateKey records the state of inplace-update.
 	// The value of annotation is InPlaceUpdateState.
 	InPlaceUpdateStateKey string = "batch.inplace.kubebuilder.io/inplace-update-state"
-	// TODO: will be removed since v1.0.0
-	InPlaceUpdateStateKeyOld string = "inplace-update-state"
-
-	// InPlaceUpdateGraceKey records the spec that Pod should be updated when
-	// grace period ends.
-	InPlaceUpdateGraceKey string = "batch.inplace.kubebuilder.io/inplace-update-grace"
-	// TODO: will be removed since v1.0.0
-	InPlaceUpdateGraceKeyOld string = "inplace-update-grace"
-
-	// RuntimeContainerMetaKey is a key in pod annotations. Kruise-daemon should report the
-	// states of runtime containers into its value, which is a structure JSON of RuntimeContainerMetaSet type.
-	RuntimeContainerMetaKey = "batch.inplace.kubebuilder.io/runtime-containers-meta"
 )
 
 var (
-	containerImagePatchRexp     = regexp.MustCompile("^/spec/containers/([0-9]+)/image$")
-	containerResourcesPatchRexp = regexp.MustCompile("^/spec/containers/([0-9]+)/resources/.*$")
-	rfc6901Decoder              = strings.NewReplacer("~1", "/", "~0", "~")
-
-	Clock clock.Clock = clock.RealClock{}
+	containerImagePatchRexp             = regexp.MustCompile("^/spec/containers/([0-9]+)/image$")
+	Clock                   clock.Clock = clock.RealClock{}
 )
 
 type RefreshResult struct {
@@ -103,7 +81,7 @@ type InPlaceUpdateState struct {
 	NextContainerRefMetadata map[string]metav1.ObjectMeta `json:"nextContainerRefMetadata,omitempty"`
 
 	// NextContainerResources is the containers with lower priority that waiting for in-place update resources in next batch.
-	NextContainerResources map[string]v1.ResourceRequirements `json:"nextContainerResources,omitempty"`
+	NextContainerResources map[string]corev1.ResourceRequirements `json:"nextContainerResources,omitempty"`
 
 	// PreCheckBeforeNext is the pre-check that must pass before the next containers can be in-place update.
 	PreCheckBeforeNext *InPlaceUpdatePreCheckBeforeNext `json:"preCheckBeforeNext,omitempty"`
@@ -133,14 +111,14 @@ type Interface interface {
 type UpdateSpec struct {
 	Revision string `json:"revision"`
 
-	ContainerImages       map[string]string                  `json:"containerImages,omitempty"`
-	ContainerRefMetadata  map[string]metav1.ObjectMeta       `json:"containerRefMetadata,omitempty"`
-	ContainerResources    map[string]v1.ResourceRequirements `json:"containerResources,omitempty"`
-	MetaDataPatch         []byte                             `json:"metaDataPatch,omitempty"`
-	UpdateEnvFromMetadata bool                               `json:"updateEnvFromMetadata,omitempty"`
+	ContainerImages       map[string]string                      `json:"containerImages,omitempty"`
+	ContainerRefMetadata  map[string]metav1.ObjectMeta           `json:"containerRefMetadata,omitempty"`
+	ContainerResources    map[string]corev1.ResourceRequirements `json:"containerResources,omitempty"`
+	MetaDataPatch         []byte                                 `json:"metaDataPatch,omitempty"`
+	UpdateEnvFromMetadata bool                                   `json:"updateEnvFromMetadata,omitempty"`
 
-	OldTemplate *v1.PodTemplateSpec `json:"oldTemplate,omitempty"`
-	NewTemplate *v1.PodTemplateSpec `json:"newTemplate,omitempty"`
+	OldTemplate *corev1.PodTemplateSpec `json:"oldTemplate,omitempty"`
+	NewTemplate *corev1.PodTemplateSpec `json:"newTemplate,omitempty"`
 }
 
 type realControl struct {
@@ -186,7 +164,7 @@ func CalculateSpec(oldRevision, newRevision *apps.ControllerRevision) *UpdateSpe
 	updateSpec := &UpdateSpec{
 		Revision:             newRevision.Name,
 		ContainerImages:      make(map[string]string),
-		ContainerResources:   make(map[string]v1.ResourceRequirements),
+		ContainerResources:   make(map[string]corev1.ResourceRequirements),
 		ContainerRefMetadata: make(map[string]metav1.ObjectMeta),
 	}
 
@@ -220,9 +198,9 @@ func CalculateSpec(oldRevision, newRevision *apps.ControllerRevision) *UpdateSpe
 	}
 
 	if len(metadataPatches) > 0 {
-		oldBytes, _ := json.Marshal(v1.Pod{ObjectMeta: oldTemp.ObjectMeta})
-		newBytes, _ := json.Marshal(v1.Pod{ObjectMeta: newTemp.ObjectMeta})
-		patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldBytes, newBytes, &v1.Pod{})
+		oldBytes, _ := json.Marshal(corev1.Pod{ObjectMeta: oldTemp.ObjectMeta})
+		newBytes, _ := json.Marshal(corev1.Pod{ObjectMeta: newTemp.ObjectMeta})
+		patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldBytes, newBytes, &corev1.Pod{})
 		if err != nil {
 			return nil
 		}
@@ -233,10 +211,10 @@ func CalculateSpec(oldRevision, newRevision *apps.ControllerRevision) *UpdateSpe
 }
 
 // GetTemplateFromRevision returns the pod template parsed from ControllerRevision.
-func GetTemplateFromRevision(revision *apps.ControllerRevision) (*v1.PodTemplateSpec, error) {
+func GetTemplateFromRevision(revision *apps.ControllerRevision) (*corev1.PodTemplateSpec, error) {
 	var patchObj *struct {
 		Spec struct {
-			Template v1.PodTemplateSpec `json:"template"`
+			Template corev1.PodTemplateSpec `json:"template"`
 		} `json:"spec"`
 	}
 	if err := json.Unmarshal(revision.Data.Raw, &patchObj); err != nil {
@@ -245,7 +223,7 @@ func GetTemplateFromRevision(revision *apps.ControllerRevision) (*v1.PodTemplate
 	return &patchObj.Spec.Template, nil
 }
 
-func (c *realControl) Update(pod *v1.Pod, oldRevision, newRevision *apps.ControllerRevision) UpdateResult {
+func (c *realControl) Update(pod *corev1.Pod, oldRevision, newRevision *apps.ControllerRevision) UpdateResult {
 	// 1. calculate inplace update spec
 	spec := CalculateSpec(oldRevision, newRevision)
 	if spec == nil {
@@ -262,7 +240,7 @@ func (c *realControl) Update(pod *v1.Pod, oldRevision, newRevision *apps.Control
 	return UpdateResult{InPlaceUpdate: true, DelayDuration: delayDuration, NewResourceVersion: newResourceVersion}
 }
 
-func (c *realControl) updatePodInPlace(pod *v1.Pod, spec *UpdateSpec) (string, error) {
+func (c *realControl) updatePodInPlace(pod *corev1.Pod, spec *UpdateSpec) (string, error) {
 	var newResourceVersion string
 	retryErr := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		clone, err := c.podAdapter.GetPod(pod.Namespace, pod.Name)
@@ -298,20 +276,20 @@ func (c *realControl) updatePodInPlace(pod *v1.Pod, spec *UpdateSpec) (string, e
 	return newResourceVersion, retryErr
 }
 
-func defaultPatchUpdateSpecToPod(pod *v1.Pod, spec *UpdateSpec, state *InPlaceUpdateState) (*v1.Pod, error) {
+func defaultPatchUpdateSpecToPod(pod *corev1.Pod, spec *UpdateSpec, state *InPlaceUpdateState) (*corev1.Pod, error) {
 	klog.V(5).InfoS("Begin to in-place update pod", "namespace", pod.Namespace, "name", pod.Name, "spec", inplaceutils.DumpJSON(spec), "state", inplaceutils.DumpJSON(state))
 
 	state.NextContainerImages = make(map[string]string)
 	state.NextContainerRefMetadata = make(map[string]metav1.ObjectMeta)
-	state.NextContainerResources = make(map[string]v1.ResourceRequirements)
+	state.NextContainerResources = make(map[string]corev1.ResourceRequirements)
 
 	if spec.MetaDataPatch != nil {
 		cloneBytes, _ := json.Marshal(pod)
-		modified, err := strategicpatch.StrategicMergePatch(cloneBytes, spec.MetaDataPatch, &v1.Pod{})
+		modified, err := strategicpatch.StrategicMergePatch(cloneBytes, spec.MetaDataPatch, &corev1.Pod{})
 		if err != nil {
 			return nil, err
 		}
-		pod = &v1.Pod{}
+		pod = &corev1.Pod{}
 		if err = json.Unmarshal(modified, pod); err != nil {
 			return nil, err
 		}
@@ -357,11 +335,11 @@ func defaultPatchUpdateSpecToPod(pod *v1.Pod, spec *UpdateSpec, state *InPlaceUp
 			if state.LastContainerStatuses == nil {
 				state.LastContainerStatuses = map[string]InPlaceUpdateContainerStatus{}
 			}
-			if cs, ok := state.LastContainerStatuses[c.Name]; !ok {
+			if iu, ok := state.LastContainerStatuses[c.Name]; !ok {
 				state.LastContainerStatuses[c.Name] = InPlaceUpdateContainerStatus{ImageID: c.ImageID}
 			} else {
 				// now just update imageID
-				cs.ImageID = c.ImageID
+				iu.ImageID = c.ImageID
 			}
 		}
 	}

@@ -17,16 +17,16 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (c *realControl) Update(cs *batchv1.Inplaceu,
+func (c *realControl) Update(iu *batchv1.Inplaceu,
 	currentRevision, updateRevision *apps.ControllerRevision, revisions []*apps.ControllerRevision,
 	pods []*corev1.Pod,
 ) error {
 
-	key := inplaceutils.GetControllerKey(cs)
-	coreControl := inplacecore.New(cs)
+	key := inplaceutils.GetControllerKey(iu)
+	coreControl := inplacecore.New(iu)
 
 	// 1. calculate update diff and the revision to update
-	diffRes := calculateDiffsWithExpectation(cs, pods, currentRevision.Name, updateRevision.Name)
+	diffRes := calculateDiffsWithExpectation(iu, pods, currentRevision.Name, updateRevision.Name)
 	if diffRes.updateNum == 0 {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (c *realControl) Update(cs *batchv1.Inplaceu,
 	// 5. update pods
 	for _, idx := range waitUpdateIndexes {
 		pod := pods[idx]
-		duration, err := c.updatePod(cs, coreControl, updateRevision, revisions, pod)
+		duration, err := c.updatePod(iu, coreControl, updateRevision, revisions, pod)
 		if duration > 0 {
 			inplaceutils.DurationStore.Push(key, duration)
 		}
@@ -105,7 +105,7 @@ func limitUpdateIndexes(coreControl inplacecore.Control, diffRes expectationDiff
 	return waitUpdateIndexes
 }
 
-func (c *realControl) updatePod(cs *batchv1.Inplaceu, coreControl inplacecore.Control,
+func (c *realControl) updatePod(iu *batchv1.Inplaceu, coreControl inplacecore.Control,
 	updateRevision *apps.ControllerRevision, revisions []*apps.ControllerRevision,
 	pod *corev1.Pod,
 ) (time.Duration, error) {
@@ -120,29 +120,29 @@ func (c *realControl) updatePod(cs *batchv1.Inplaceu, coreControl inplacecore.Co
 		res := c.inplaceControl.Update(pod, oldRevision, updateRevision)
 		if res.InPlaceUpdate {
 			if res.UpdateErr == nil {
-				c.recorder.Eventf(cs, corev1.EventTypeNormal, "SuccessfulUpdatePodInPlace", "successfully update pod %s in-place(revision %v)", pod.Name, updateRevision.Name)
+				c.recorder.Eventf(iu, corev1.EventTypeNormal, "SuccessfulUpdatePodInPlace", "successfully update pod %s in-place(revision %v)", pod.Name, updateRevision.Name)
 				inplaceutils.ResourceVersionExpectations.Expect(&metav1.ObjectMeta{UID: pod.UID, ResourceVersion: res.NewResourceVersion})
 				return res.DelayDuration, nil
 			}
 
-			c.recorder.Eventf(cs, corev1.EventTypeWarning, "FailedUpdatePodInPlace", "failed to update pod %s in-place(revision %v): %v", pod.Name, updateRevision.Name, res.UpdateErr)
+			c.recorder.Eventf(iu, corev1.EventTypeWarning, "FailedUpdatePodInPlace", "failed to update pod %s in-place(revision %v): %v", pod.Name, updateRevision.Name, res.UpdateErr)
 			return res.DelayDuration, res.UpdateErr
 		}
 	}
 
-	klog.InfoS("CloneSet could not update Pod in-place, so it will back off to ReCreate", "cloneSet", klog.KObj(cs), "pod", klog.KObj(pod))
+	klog.InfoS("inplaceU could not update Pod in-place, so it will back off to ReCreate", "inplaceU", klog.KObj(iu), "pod", klog.KObj(pod))
 
-	klog.V(2).InfoS("CloneSet started to patch Pod specified-delete for update", "cloneSet", klog.KObj(cs), "pod", klog.KObj(pod), "updateRevision", klog.KObj(updateRevision))
+	klog.V(2).InfoS("inplaceU started to patch Pod specified-delete for update", "inplaceU", klog.KObj(iu), "pod", klog.KObj(pod), "updateRevision", klog.KObj(updateRevision))
 
 	if patched, err := specifieddelete.PatchPodSpecifiedDelete(c.Client, pod, "true"); err != nil {
-		c.recorder.Eventf(cs, v1.EventTypeWarning, "FailedUpdatePodReCreate",
+		c.recorder.Eventf(iu, v1.EventTypeWarning, "FailedUpdatePodReCreate",
 			"failed to patch pod specified-delete %s for update(revision %s): %v", pod.Name, updateRevision.Name, err)
 		return 0, err
 	} else if patched {
 		inplaceutils.ResourceVersionExpectations.Expect(pod)
 	}
 
-	c.recorder.Eventf(cs, corev1.EventTypeNormal, "SuccessfulUpdatePodReCreate",
+	c.recorder.Eventf(iu, corev1.EventTypeNormal, "SuccessfulUpdatePodReCreate",
 		"successfully patch pod %s specified-delete for update(revision %s)", pod.Name, updateRevision.Name)
 	return 0, nil
 }

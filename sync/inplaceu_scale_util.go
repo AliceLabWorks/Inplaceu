@@ -46,14 +46,14 @@ func (e expectationDiffs) String() string {
 	return string(b)
 }
 
-func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, currentRevision, updateRevision string) (res expectationDiffs) {
-	replicas := int(*cs.Spec.Replicas)
+func calculateDiffsWithExpectation(iu *batchv1.Inplaceu, pods []*corev1.Pod, currentRevision, updateRevision string) (res expectationDiffs) {
+	replicas := int(*iu.Spec.Replicas)
 	var maxSurge, maxUnavailable int
-	if cs.Spec.Strategy.RollingUpdate.MaxSurge != nil {
-		maxSurge, _ = intstrutil.GetValueFromIntOrPercent(cs.Spec.Strategy.RollingUpdate.MaxSurge, replicas, true)
+	if iu.Spec.Strategy.RollingUpdate.MaxSurge != nil {
+		maxSurge, _ = intstrutil.GetValueFromIntOrPercent(iu.Spec.Strategy.RollingUpdate.MaxSurge, replicas, true)
 	}
 	maxUnavailable, _ = intstrutil.GetValueFromIntOrPercent(
-		intstrutil.ValueOrDefault(cs.Spec.Strategy.RollingUpdate.MaxUnavailable, intstrutil.FromInt(0)), replicas, maxSurge == 0)
+		intstrutil.ValueOrDefault(iu.Spec.Strategy.RollingUpdate.MaxUnavailable, intstrutil.FromInt(0)), replicas, maxSurge == 0)
 
 	var newRevisionCount, oldRevisionCount int
 	var unavailableNewRevisionCount, unavailableOldRevisionCount int
@@ -62,7 +62,7 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 		if res.isEmpty() {
 			return
 		}
-		klog.V(1).InfoS("Calculate diffs for CloneSet", "cloneSet", klog.KObj(cs), "replicas", replicas,
+		klog.V(1).InfoS("Calculate diffs for inplaceU", "inplaceU", klog.KObj(iu), "replicas", replicas,
 			"maxSurge", maxSurge, "maxUnavailable", maxUnavailable, "allPodCount", len(pods), "newRevisionCount", newRevisionCount,
 			"oldrevisionCount", oldRevisionCount, "unavailableNewRevisionCount", unavailableNewRevisionCount,
 			"unavailableOldRevisionCount", unavailableOldRevisionCount, "toDeleteOldRevisionCount", toDeleteOldRevisionCount,
@@ -124,7 +124,7 @@ func calculateDiffsWithExpectation(cs *batchv1.Inplaceu, pods []*corev1.Pod, cur
 		res.deleteReadyLimit = integer.IntMax(maxUnavailable+(len(pods)-replicas)-totalUnavailable, 0)
 	}
 
-	// The consistency between scale and update will be guaranteed by syncCloneSet and expectations
+	// The consistency between scale and update will be guaranteed by syncinplaceU and expectations
 	// 其实在update时如果走到这里,toDeleteOldRevisionCount应该是0
 	if oldRevisionCount > toDeleteOldRevisionCount {
 		res.updateNum = oldRevisionCount - toDeleteOldRevisionCount

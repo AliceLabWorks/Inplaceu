@@ -23,9 +23,9 @@ import (
 )
 
 const (
-	// CloneSetInstanceID is a unique id for Pods and PVCs.
-	// Each pod and the pvcs it owns have the same instance-id.
-	InplaceuInstanceID = "batch.inplace.kubebuilder.io/cloneset-instance-id"
+	// InplaceuInstanceID is a unique id for Pods.
+	// Each pod has the same instance-id.
+	InplaceuInstanceID = "batch.inplace.kubebuilder.io/inplaceu-instance-id"
 
 	SpecifiedDeleteKey = "batch.inplace.kubebuilder.io/specified-delete"
 )
@@ -102,10 +102,10 @@ type InplaceuStatus struct {
 	// newest ReplicaSet.
 	CollisionCount *int32 `json:"collisionCount,omitempty"`
 
-	// UpdateRevision, if not empty, indicates the latest revision of the CloneSet.
+	// UpdateRevision, if not empty, indicates the latest revision of the inplaceu.
 	UpdateRevision string `json:"updateRevision,omitempty"`
 
-	// currentRevision, if not empty, indicates the current revision version of the CloneSet.
+	// currentRevision, if not empty, indicates the current revision version of the inplaceu.
 	CurrentRevision string `json:"currentRevision,omitempty"`
 }
 

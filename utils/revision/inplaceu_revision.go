@@ -33,8 +33,8 @@ import (
 
 // Interface is a interface to new and apply ControllerRevision.
 type Interface interface {
-	NewRevision(cs *batchv1.Inplaceu, revision int64, collisionCount *int32) (*apps.ControllerRevision, error)
-	ApplyRevision(cs *batchv1.Inplaceu, revision *apps.ControllerRevision) (*batchv1.Inplaceu, error)
+	NewRevision(iu *batchv1.Inplaceu, revision int64, collisionCount *int32) (*apps.ControllerRevision, error)
+	ApplyRevision(iu *batchv1.Inplaceu, revision *apps.ControllerRevision) (*batchv1.Inplaceu, error)
 }
 
 // NewRevisionControl create a normal revision control.
@@ -48,15 +48,15 @@ type realControl struct {
 	scheme *runtime.Scheme
 }
 
-func (c *realControl) NewRevision(cs *batchv1.Inplaceu, revision int64, collisionCount *int32) (*apps.ControllerRevision, error) {
-	coreControl := inplaceucore.New(cs)
-	patch, err := c.getPatch(cs, coreControl)
+func (c *realControl) NewRevision(iu *batchv1.Inplaceu, revision int64, collisionCount *int32) (*apps.ControllerRevision, error) {
+	coreControl := inplaceucore.New(iu)
+	patch, err := c.getPatch(iu, coreControl)
 	if err != nil {
 		return nil, err
 	}
-	cr, err := history.NewControllerRevision(cs,
+	cr, err := history.NewControllerRevision(iu,
 		utils.ControllerKind,
-		cs.Spec.Template.Labels,
+		iu.Spec.Template.Labels,
 		runtime.RawExtension{Raw: patch},
 		revision,
 		collisionCount)
@@ -66,19 +66,19 @@ func (c *realControl) NewRevision(cs *batchv1.Inplaceu, revision int64, collisio
 	if cr.ObjectMeta.Annotations == nil {
 		cr.ObjectMeta.Annotations = make(map[string]string)
 	}
-	for key, value := range cs.Annotations {
+	for key, value := range iu.Annotations {
 		cr.ObjectMeta.Annotations[key] = value
 	}
 	return cr, nil
 }
 
-// getPatch returns a strategic merge patch that can be applied to restore a CloneSet to a
+// getPatch returns a strategic merge patch that can be applied to restore a inplaceU to a
 // previous version. If the returned error is nil the patch is valid. The current state that we save is just the
 // PodSpecTemplate. We can modify this later to encompass more state (or less) and remain compatible with previously
 // recorded patches.
-func (c *realControl) getPatch(cs *batchv1.Inplaceu, coreControl inplaceucore.Control) ([]byte, error) {
+func (c *realControl) getPatch(iu *batchv1.Inplaceu, coreControl inplaceucore.Control) ([]byte, error) {
 	patchCodec := serializer.NewCodecFactory(c.scheme).LegacyCodec(batchv1.GroupVersion)
-	str, err := runtime.Encode(patchCodec, cs)
+	str, err := runtime.Encode(patchCodec, iu)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +95,8 @@ func (c *realControl) getPatch(cs *batchv1.Inplaceu, coreControl inplaceucore.Co
 	return patch, err
 }
 
-func (c *realControl) ApplyRevision(cs *batchv1.Inplaceu, revision *apps.ControllerRevision) (*batchv1.Inplaceu, error) {
-	clone := cs.DeepCopy()
+func (c *realControl) ApplyRevision(iu *batchv1.Inplaceu, revision *apps.ControllerRevision) (*batchv1.Inplaceu, error) {
+	clone := iu.DeepCopy()
 	patchCodec := serializer.NewCodecFactory(c.scheme).LegacyCodec(batchv1.GroupVersion)
 	cloneBytes, err := runtime.Encode(patchCodec, clone)
 	if err != nil {

@@ -35,7 +35,7 @@ type Interface interface {
 		pods []*corev1.Pod,
 	) (bool, error)
 
-	Update(cs *batchv1.Inplaceu,
+	Update(iu *batchv1.Inplaceu,
 		currentRevision, updateRevision *apps.ControllerRevision, revisions []*apps.ControllerRevision,
 		pods []*corev1.Pod,
 	) error

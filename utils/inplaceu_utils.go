@@ -39,7 +39,7 @@ import (
 )
 
 var (
-	// ControllerKind is GroupVersionKind for CloneSet.
+	// ControllerKind is GroupVersionKind for inplaceU.
 	ControllerKind      = batchv1.GroupVersion.WithKind("Inplaceu")
 	RevisionAdapterImpl = &revisionAdapterImpl{}
 	EqualToRevisionHash = RevisionAdapterImpl.EqualToRevisionHash
@@ -67,8 +67,8 @@ func (r *revisionAdapterImpl) WriteRevisionHash(obj metav1.Object, hash string) 
 	if obj.GetLabels() == nil {
 		obj.SetLabels(make(map[string]string, 1))
 	}
-	// Note that controller-revision-hash defaults to be "{CLONESET_NAME}-{HASH}",
-	// and it will be "{HASH}" if CloneSetShortHash feature-gate has been enabled.
+	// Note that controller-revision-hash defaults to be "{inplaceU_NAME}-{HASH}",
+	// and it will be "{HASH}" if inplaceUShortHash feature-gate has been enabled.
 	// But pod-template-hash should always be the short format.
 	shortHash := GetShortHash(hash)
 	obj.GetLabels()[apps.ControllerRevisionHashLabelKey] = hash
@@ -82,9 +82,9 @@ func GetShortHash(hash string) string {
 	return list[len(list)-1]
 }
 
-// GetControllerKey return key of CloneSet.
-func GetControllerKey(cs *batchv1.Inplaceu) string {
-	return types.NamespacedName{Namespace: cs.Namespace, Name: cs.Name}.String()
+// GetControllerKey return key of inplaceU.
+func GetControllerKey(iu *batchv1.Inplaceu) string {
+	return types.NamespacedName{Namespace: iu.Namespace, Name: iu.Name}.String()
 }
 
 // GetActiveAndInactivePods get activePods and inactivePods

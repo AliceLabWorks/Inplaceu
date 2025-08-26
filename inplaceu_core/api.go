@@ -40,6 +40,6 @@ type Control interface {
 	GetPodsSortFunc(pods []*v1.Pod, waitUpdateIndexes []int) func(i, j int) bool
 }
 
-func New(cs *batchv1.Inplaceu) Control {
-	return &commonControl{Inplaceu: cs}
+func New(iu *batchv1.Inplaceu) Control {
+	return &commonControl{Inplaceu: iu}
 }

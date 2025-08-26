@@ -48,8 +48,8 @@ func (r *realControl) Scale(
 		// total number of this creation
 		expectedCreations := diffRes.scaleUpNum
 
-		klog.V(3).InfoS("CloneSet began to scale out pods, including current revision",
-			"cloneSet", klog.KObj(updateCS), "expectedCreations", expectedCreations)
+		klog.V(3).InfoS("inplaceU began to scale out pods, including current revision",
+			"inplaceU", klog.KObj(updateCS), "expectedCreations", expectedCreations)
 
 		// available instance-id come from free pvc
 		availableIDs := getOrGenAvailableIDs(expectedCreations, pods)
@@ -61,7 +61,7 @@ func (r *realControl) Scale(
 	// 4. specified delete
 	if len(podsSpecifiedToDelete) > 0 {
 		newPodsToDelete, oldPodsToDelete := inplaceutils.GroupUpdateAndNotUpdatePods(podsSpecifiedToDelete, updateRevision)
-		klog.V(3).InfoS("CloneSet tried to delete pods specified", "cloneSet", klog.KObj(updateCS), "deleteReadyLimit", diffRes.deleteReadyLimit,
+		klog.V(3).InfoS("inplaceU tried to delete pods specified", "inplaceU", klog.KObj(updateCS), "deleteReadyLimit", diffRes.deleteReadyLimit,
 			"newPods", inplaceutils.GetPodNames(newPodsToDelete).List(), "oldPods", inplaceutils.GetPodNames(oldPodsToDelete).List())
 
 		podsCanDelete := make([]*v1.Pod, 0, len(podsSpecifiedToDelete))
@@ -81,7 +81,7 @@ func (r *realControl) Scale(
 
 	// 5. scale in
 	if diffRes.scaleDownNum > 0 {
-		klog.V(3).InfoS("CloneSet began to scale in", "cloneSet", klog.KObj(updateCS), "scaleDownNum", diffRes.scaleDownNum,
+		klog.V(3).InfoS("inplaceU began to scale in", "inplaceU", klog.KObj(updateCS), "scaleDownNum", diffRes.scaleDownNum,
 			"deleteReadyLimit", diffRes.deleteReadyLimit)
 
 		podsPreparingToDelete := r.choosePodsToDelete(updateCS, diffRes.scaleDownNum, updatedPods)
@@ -124,9 +124,9 @@ func (r *realControl) createPods(
 	_, err = inplaceutils.DoItSlowly(len(newPods), initialBatchSize, func() error {
 		pod := <-podsCreationChan
 
-		cs := updateCS
+		iu := updateCS
 		var createErr error
-		if createErr = r.createOnePod(cs, pod); createErr != nil {
+		if createErr = r.createOnePod(iu, pod); createErr != nil {
 			return createErr
 		}
 
@@ -178,17 +178,17 @@ func getOrGenInstanceID(existingIDs sets.String) string {
 	return id
 }
 
-func (r *realControl) createOnePod(cs *batchv1.Inplaceu, pod *v1.Pod) error {
+func (r *realControl) createOnePod(iu *batchv1.Inplaceu, pod *v1.Pod) error {
 	if err := r.Create(context.TODO(), pod); err != nil {
-		r.recorder.Eventf(cs, v1.EventTypeWarning, "FailedCreate", "failed to create pod: %v, pod: %v", err, inplaceutils.DumpJSON(pod))
+		r.recorder.Eventf(iu, v1.EventTypeWarning, "FailedCreate", "failed to create pod: %v, pod: %v", err, inplaceutils.DumpJSON(pod))
 		return err
 	}
 
-	r.recorder.Eventf(cs, v1.EventTypeNormal, "SuccessfulCreate", "succeed to create pod %s", pod.Name)
+	r.recorder.Eventf(iu, v1.EventTypeNormal, "SuccessfulCreate", "succeed to create pod %s", pod.Name)
 	return nil
 }
 
-func (r *realControl) choosePodsToDelete(cs *batchv1.Inplaceu, totalDiff int, updatedPods []*v1.Pod) []*v1.Pod {
+func (r *realControl) choosePodsToDelete(iu *batchv1.Inplaceu, totalDiff int, updatedPods []*v1.Pod) []*v1.Pod {
 	choose := func(pods []*v1.Pod, diff int) []*v1.Pod {
 		// No need to sort pods if we are about to delete all of them.
 		if diff < len(pods) {
@@ -214,17 +214,17 @@ func (r *realControl) choosePodsToDelete(cs *batchv1.Inplaceu, totalDiff int, up
 	return podsToDelete
 }
 
-func (r *realControl) deletePods(cs *batchv1.Inplaceu, podsToDelete []*v1.Pod) (bool, error) {
+func (r *realControl) deletePods(iu *batchv1.Inplaceu, podsToDelete []*v1.Pod) (bool, error) {
 	var modified bool
 	for _, pod := range podsToDelete {
-		inplaceutils.ScaleExpectations.ExpectScale(inplaceutils.GetControllerKey(cs), expectations.Delete, pod.Name)
+		inplaceutils.ScaleExpectations.ExpectScale(inplaceutils.GetControllerKey(iu), expectations.Delete, pod.Name)
 		if err := r.Delete(context.TODO(), pod); err != nil {
-			inplaceutils.ScaleExpectations.ObserveScale(inplaceutils.GetControllerKey(cs), expectations.Delete, pod.Name)
-			r.recorder.Eventf(cs, v1.EventTypeWarning, "FailedDelete", "failed to delete pod %s: %v", pod.Name, err)
+			inplaceutils.ScaleExpectations.ObserveScale(inplaceutils.GetControllerKey(iu), expectations.Delete, pod.Name)
+			r.recorder.Eventf(iu, v1.EventTypeWarning, "FailedDelete", "failed to delete pod %s: %v", pod.Name, err)
 			return modified, err
 		}
 		modified = true
-		r.recorder.Event(cs, v1.EventTypeNormal, "SuccessfulDelete", fmt.Sprintf("succeed to delete pod %s", pod.Name))
+		r.recorder.Event(iu, v1.EventTypeNormal, "SuccessfulDelete", fmt.Sprintf("succeed to delete pod %s", pod.Name))
 	}
 
 	return modified, nil

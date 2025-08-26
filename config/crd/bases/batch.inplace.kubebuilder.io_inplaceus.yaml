@@ -8074,7 +8074,7 @@ spec:
                 type: array
               currentRevision:
                 description: currentRevision, if not empty, indicates the current
-                  revision version of the CloneSet.
+                  revision version of the inplaceu.
                 type: string
               observedGeneration:
                 description: The generation observed by the deployment controller.
@@ -8107,7 +8107,7 @@ spec:
                 type: integer
               updateRevision:
                 description: UpdateRevision, if not empty, indicates the latest revision
-                  of the CloneSet.
+                  of the inplaceu.
                 type: string
               updatedReplicas:
                 description: Total number of non-terminating pods targeted by this

@@ -71,7 +71,7 @@ func (c *commonControl) NewVersionedPods(updateCS *batchv1.Inplaceu,
 	return newPods, nil
 }
 
-func (c *commonControl) newVersionedPods(cs *batchv1.Inplaceu, revision string, replicas int, availableIDs *[]string) []*corev1.Pod {
+func (c *commonControl) newVersionedPods(iu *batchv1.Inplaceu, revision string, replicas int, availableIDs *[]string) []*corev1.Pod {
 	var newPods []*corev1.Pod
 	for i := 0; i < replicas; i++ {
 		if len(*availableIDs) == 0 {
@@ -80,14 +80,14 @@ func (c *commonControl) newVersionedPods(cs *batchv1.Inplaceu, revision string, 
 		id := (*availableIDs)[0]
 		*availableIDs = (*availableIDs)[1:]
 
-		pod, _ := kubecontroller.GetPodFromTemplate(&cs.Spec.Template, cs, metav1.NewControllerRef(cs, utils.ControllerKind))
+		pod, _ := kubecontroller.GetPodFromTemplate(&iu.Spec.Template, iu, metav1.NewControllerRef(iu, utils.ControllerKind))
 		if pod.Labels == nil {
 			pod.Labels = make(map[string]string)
 		}
 		utils.WriteRevisionHash(pod, revision)
 
-		pod.Name = fmt.Sprintf("%s-%s", cs.Name, id)
-		pod.Namespace = cs.Namespace
+		pod.Name = fmt.Sprintf("%s-%s", iu.Name, id)
+		pod.Namespace = iu.Namespace
 		pod.Labels[v1.InplaceuInstanceID] = id
 
 		newPods = append(newPods, pod)

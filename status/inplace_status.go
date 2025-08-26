@@ -31,7 +31,7 @@ import (
 
 // StatusUpdater is interface for updating Inplaceu status.
 type StatusUpdater interface {
-	UpdateInplaceuSetStatus(cs *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) error
+	UpdateInplaceuSetStatus(iu *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) error
 }
 
 func NewStatusUpdater(c client.Client) StatusUpdater {
@@ -42,20 +42,20 @@ type realStatusUpdater struct {
 	client.Client
 }
 
-func (r *realStatusUpdater) UpdateInplaceuSetStatus(cs *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) error {
-	r.calculateStatus(cs, newStatus, pods)
-	if !r.inconsistentStatus(cs, newStatus) {
+func (r *realStatusUpdater) UpdateInplaceuSetStatus(iu *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) error {
+	r.calculateStatus(iu, newStatus, pods)
+	if !r.inconsistentStatus(iu, newStatus) {
 		return nil
 	}
-	klog.InfoS("To update CloneSet status", "cloneSet", klog.KObj(cs), "replicas", newStatus.Replicas, "ready", newStatus.ReadyReplicas, "available", newStatus.AvailableReplicas,
+	klog.InfoS("To update inplaceU status", "inplaceU", klog.KObj(iu), "replicas", newStatus.Replicas, "ready", newStatus.ReadyReplicas, "available", newStatus.AvailableReplicas,
 		"updated", newStatus.UpdatedReplicas, "currentRevision", newStatus.CurrentRevision, "updateRevision", newStatus.UpdateRevision)
-	return r.updateStatus(cs, newStatus)
+	return r.updateStatus(iu, newStatus)
 }
 
-func (r *realStatusUpdater) updateStatus(cs *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus) error {
+func (r *realStatusUpdater) updateStatus(iu *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		clone := &batchv1.Inplaceu{}
-		if err := r.Get(context.TODO(), types.NamespacedName{Namespace: cs.Namespace, Name: cs.Name}, clone); err != nil {
+		if err := r.Get(context.TODO(), types.NamespacedName{Namespace: iu.Namespace, Name: iu.Name}, clone); err != nil {
 			return err
 		}
 		clone.Status = *newStatus
@@ -63,8 +63,8 @@ func (r *realStatusUpdater) updateStatus(cs *batchv1.Inplaceu, newStatus *batchv
 	})
 }
 
-func (r *realStatusUpdater) inconsistentStatus(cs *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus) bool {
-	oldStatus := cs.Status
+func (r *realStatusUpdater) inconsistentStatus(iu *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus) bool {
+	oldStatus := iu.Status
 	return newStatus.ObservedGeneration > oldStatus.ObservedGeneration ||
 		newStatus.Replicas != oldStatus.Replicas ||
 		newStatus.ReadyReplicas != oldStatus.ReadyReplicas ||
@@ -74,13 +74,13 @@ func (r *realStatusUpdater) inconsistentStatus(cs *batchv1.Inplaceu, newStatus *
 		newStatus.CurrentRevision != oldStatus.CurrentRevision
 }
 
-func (r *realStatusUpdater) calculateStatus(cs *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) {
+func (r *realStatusUpdater) calculateStatus(iu *batchv1.Inplaceu, newStatus *batchv1.InplaceuStatus, pods []*v1.Pod) {
 	for _, pod := range pods {
 		newStatus.Replicas++
 		if inplaceutils.IsRunning(pod) {
 			newStatus.ReadyReplicas++
 		}
-		if inplaceutils.IsPodAvailable(pod, cs.Spec.MinReadySeconds) {
+		if inplaceutils.IsPodAvailable(pod, iu.Spec.MinReadySeconds) {
 			newStatus.AvailableReplicas++
 		}
 		if inplaceutils.EqualToRevisionHash("", pod, newStatus.UpdateRevision) {
@@ -88,7 +88,7 @@ func (r *realStatusUpdater) calculateStatus(cs *batchv1.Inplaceu, newStatus *bat
 		}
 	}
 	// Consider the update revision as stable if revisions of all pods are consistent to it and have the expected number of replicas, no need to wait all of them ready
-	if newStatus.UpdatedReplicas == newStatus.Replicas && newStatus.Replicas == *cs.Spec.Replicas {
+	if newStatus.UpdatedReplicas == newStatus.Replicas && newStatus.Replicas == *iu.Spec.Replicas {
 		newStatus.CurrentRevision = newStatus.UpdateRevision
 	}
 }
