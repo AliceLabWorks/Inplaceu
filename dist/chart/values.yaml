@@ -61,7 +61,7 @@ crd:
 # To disable metrics export set false, and ensure that the
 # ControllerManager argument "--metrics-bind-address=:8443" is removed.
 metrics:
-  enable: true
+  enable: false
 
 # [PROMETHEUS]: To enable a ServiceMonitor to export metrics to Prometheus set true
 prometheus:

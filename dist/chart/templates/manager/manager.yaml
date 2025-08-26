@@ -34,6 +34,7 @@ spec:
           command:
             - /manager
           image: {{ .Values.controllerManager.container.image.repository }}:{{ .Values.controllerManager.container.image.tag }}
+          imagePullPolicy: Never
           {{- if .Values.controllerManager.container.env }}
           env:
             {{- range $key, $value := .Values.controllerManager.container.env }}
