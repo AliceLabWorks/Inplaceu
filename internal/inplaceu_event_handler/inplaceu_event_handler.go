@@ -90,12 +90,12 @@ func (e *PodEventHandler) Create(ctx context.Context, evt event.TypedCreateEvent
 	// them to see if anyone wants to adopt it.
 	// DO NOT observe creation because no controller should be waiting for an
 	// orphan.
-	csList := e.getPodInplaceUs(pod)
-	if len(csList) == 0 {
+	iuList := e.getPodInplaceUs(pod)
+	if len(iuList) == 0 {
 		return
 	}
-	klog.V(4).InfoS("Orphan Pod created", "pod", klog.KObj(pod), "owner", e.joinInplaceUNames(csList))
-	for _, iu := range csList {
+	klog.V(4).InfoS("Orphan Pod created", "pod", klog.KObj(pod), "owner", e.joinInplaceUNames(iuList))
+	for _, iu := range iuList {
 		q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
 			Name:      iu.GetName(),
 			Namespace: iu.GetNamespace(),
